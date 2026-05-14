@@ -191,11 +191,20 @@ async function handleRpc(req: JsonRpcRequest) {
     let result: any;
     switch (method) {
       case "initialize":
-        result = {
-          protocolVersion: "2024-11-05",
-          capabilities: { tools: {} },
-          serverInfo: { name: "blackmatter-xmcp", version: "0.1.0" },
-        };
+        // Respect the client's requested protocolVersion if we support it,
+        // otherwise return our latest supported version. We support the
+        // 2024-11-05, 2025-03-26, and 2025-06-18 wire versions — the
+        // tool-call surface hasn't changed in ways that affect us.
+        {
+          const supported = ["2025-06-18", "2025-03-26", "2024-11-05"];
+          const clientVersion = (params?.protocolVersion as string) ?? "";
+          const chosen = supported.includes(clientVersion) ? clientVersion : supported[0];
+          result = {
+            protocolVersion: chosen,
+            capabilities: { tools: { listChanged: false } },
+            serverInfo: { name: "blackmatter-xmcp", version: "0.1.0" },
+          };
+        }
         break;
       case "tools/list":
         result = { tools: TOOLS };
@@ -266,14 +275,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = req.body;
+  const accept = (req.headers.accept ?? "").toString();
+  const wantsSse = accept.includes("text/event-stream");
+
   if (Array.isArray(body)) {
     const responses = await Promise.all(body.map(handleRpc));
     const nonNull = responses.filter((r) => r !== null);
     if (nonNull.length === 0) return res.status(204).end();
+    if (wantsSse) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.status(200);
+      for (const r of nonNull) {
+        res.write(`event: message\ndata: ${JSON.stringify(r)}\n\n`);
+      }
+      return res.end();
+    }
     return res.status(200).json(nonNull);
   } else {
     const response = await handleRpc(body);
-    if (response === null) return res.status(204).end();
+    if (response === null) {
+      if (wantsSse) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        return res.status(202).end();
+      }
+      return res.status(204).end();
+    }
+    if (wantsSse) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.status(200);
+      res.write(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
+      return res.end();
+    }
     return res.status(200).json(response);
   }
 }
