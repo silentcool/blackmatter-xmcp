@@ -2,13 +2,32 @@
 
 Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built for the Black Matter VC agent swarm to give agents structured X API access without scraping x.com.
 
-## Tools exposed
+## Tools exposed (13)
 
+**Per-user reads:**
 | Tool | Purpose |
 |---|---|
 | `get_user_tweets` | Recent original tweets for a username (excludes replies + retweets by default) |
 | `get_user_info` | User profile lookup by username |
-| `get_tweet_metrics` | Engagement metrics for a specific tweet by ID |
+| `get_user_mentions` | Recent @-mentions of a user |
+| `get_user_followers` | Most-recent follower list (single page) |
+| `get_user_following` | Accounts the user follows (single page) |
+
+**Per-tweet reads:**
+| Tool | Purpose |
+|---|---|
+| `get_tweet_metrics` | Engagement metrics only (cheapest refresh path) |
+| `lookup_tweet` | Full tweet content + author via expansion |
+| `get_tweet_quote_tweets` | Users who quote-posted a tweet |
+| `get_tweet_retweeted_by` | Users who reposted a tweet |
+| `get_tweet_liking_users` | Users who liked a tweet |
+
+**Discovery + batch:**
+| Tool | Purpose |
+|---|---|
+| `search_recent_tweets` | Last-7-days full-text search with X operators |
+| `lookup_tweets_batch` | Up to 100 tweet IDs per call (cheap batch fetch) |
+| `lookup_users_batch` | Up to 100 usernames per call |
 
 ## Deploy
 

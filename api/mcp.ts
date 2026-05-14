@@ -85,6 +85,127 @@ async function getTweetMetrics(tweet_id: string) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Expanded X API surface — added 2026-05-14
+// ───────────────────────────────────────────────────────────────────────────
+
+const TWEET_FIELDS_FULL =
+  "id,text,created_at,public_metrics,in_reply_to_user_id,referenced_tweets,entities,lang,conversation_id,author_id";
+const USER_FIELDS_FULL =
+  "id,name,username,public_metrics,description,verified,profile_image_url,location,url";
+
+function clampMaxResults(value: number | undefined, lo: number, hi: number, def: number): number {
+  const v = typeof value === "number" ? value : def;
+  return Math.min(Math.max(v, lo), hi);
+}
+
+async function searchRecentTweets(query: string, max_results?: number) {
+  if (!query || query.length < 2) throw new Error("query must be at least 2 chars");
+  const data = await xRequest(`/tweets/search/recent`, {
+    query,
+    max_results: String(clampMaxResults(max_results, 10, 100, 10)),
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { tweets: data.data ?? [], users: data.includes?.users ?? [], meta: data.meta };
+}
+
+async function lookupTweet(tweet_id: string) {
+  const data = await xRequest(`/tweets/${encodeURIComponent(tweet_id)}`, {
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  if (!data.data) throw new Error(`Tweet not found: ${tweet_id}`);
+  return { tweet: data.data, author: data.includes?.users?.[0] };
+}
+
+async function lookupTweetsBatch(tweet_ids: string[]) {
+  if (!Array.isArray(tweet_ids) || tweet_ids.length === 0) {
+    throw new Error("tweet_ids must be a non-empty array");
+  }
+  if (tweet_ids.length > 100) {
+    throw new Error("max 100 tweet_ids per batch");
+  }
+  const data = await xRequest(`/tweets`, {
+    ids: tweet_ids.join(","),
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { tweets: data.data ?? [], users: data.includes?.users ?? [], errors: data.errors ?? [] };
+}
+
+async function lookupUsersBatch(usernames: string[]) {
+  if (!Array.isArray(usernames) || usernames.length === 0) {
+    throw new Error("usernames must be a non-empty array");
+  }
+  if (usernames.length > 100) {
+    throw new Error("max 100 usernames per batch");
+  }
+  const data = await xRequest(`/users/by`, {
+    usernames: usernames.join(","),
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { users: data.data ?? [], errors: data.errors ?? [] };
+}
+
+async function getUserMentions(username: string, max_results?: number) {
+  const user = await getUserByUsername(username);
+  const data = await xRequest(`/users/${user.id}/mentions`, {
+    max_results: String(clampMaxResults(max_results, 5, 100, 10)),
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { user, mentions: data.data ?? [], authors: data.includes?.users ?? [], meta: data.meta };
+}
+
+async function getTweetQuoteTweets(tweet_id: string, max_results?: number) {
+  const data = await xRequest(`/tweets/${encodeURIComponent(tweet_id)}/quote_tweets`, {
+    max_results: String(clampMaxResults(max_results, 10, 100, 10)),
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { quote_tweets: data.data ?? [], authors: data.includes?.users ?? [], meta: data.meta };
+}
+
+async function getTweetRetweetedBy(tweet_id: string, max_results?: number) {
+  const data = await xRequest(`/tweets/${encodeURIComponent(tweet_id)}/retweeted_by`, {
+    max_results: String(clampMaxResults(max_results, 10, 100, 10)),
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { users: data.data ?? [], meta: data.meta };
+}
+
+async function getTweetLikingUsers(tweet_id: string, max_results?: number) {
+  const data = await xRequest(`/tweets/${encodeURIComponent(tweet_id)}/liking_users`, {
+    max_results: String(clampMaxResults(max_results, 10, 100, 10)),
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { users: data.data ?? [], meta: data.meta };
+}
+
+async function getUserFollowers(username: string, max_results?: number) {
+  const user = await getUserByUsername(username);
+  const data = await xRequest(`/users/${user.id}/followers`, {
+    max_results: String(clampMaxResults(max_results, 10, 1000, 100)),
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { user, followers: data.data ?? [], meta: data.meta };
+}
+
+async function getUserFollowing(username: string, max_results?: number) {
+  const user = await getUserByUsername(username);
+  const data = await xRequest(`/users/${user.id}/following`, {
+    max_results: String(clampMaxResults(max_results, 10, 1000, 100)),
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return { user, following: data.data ?? [], meta: data.meta };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // MCP tool definitions
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -149,6 +270,181 @@ const TOOLS = [
       required: ["tweet_id"],
     },
   },
+  {
+    name: "search_recent_tweets",
+    description:
+      "Search recent public tweets (last 7 days) by query. Supports X's standard search operators: 'from:user', 'to:user', '#tag', '@user', 'lang:en', 'has:links', '-filter:retweets', boolean OR / AND, quoted phrases. Use for: finding mentions of a product/topic, conversation discovery, competitive intel. Returns tweets + author info via expansions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "X search query, max 512 chars. Example: '\"black matter\" -is:retweet lang:en'",
+        },
+        max_results: {
+          type: "number",
+          description: "Results to return (10-100, default 10)",
+          minimum: 10,
+          maximum: 100,
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "lookup_tweet",
+    description:
+      "Full tweet lookup by ID — returns tweet text, public_metrics, referenced_tweets, conversation_id, plus the author user object via expansion. Richer than get_tweet_metrics. Use when you need the full tweet content (e.g. to summarize a watchlist post Scout or Listener referenced).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tweet_id: { type: "string", description: "Numeric tweet ID" },
+      },
+      required: ["tweet_id"],
+    },
+  },
+  {
+    name: "lookup_tweets_batch",
+    description:
+      "Look up multiple tweets in a single call (up to 100 IDs). Cheaper than N individual calls when refreshing engagement on many entries. Returns tweets array + authors via expansion + per-ID errors for any missing tweets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tweet_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Numeric tweet IDs (max 100)",
+          maxItems: 100,
+        },
+      },
+      required: ["tweet_ids"],
+    },
+  },
+  {
+    name: "lookup_users_batch",
+    description:
+      "Look up multiple users by usernames in a single call (up to 100). Used for hydrating watchlist user data, follower-count refreshes, batch profile pulls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        usernames: {
+          type: "array",
+          items: { type: "string" },
+          description: "X handles without @ (max 100)",
+          maxItems: 100,
+        },
+      },
+      required: ["usernames"],
+    },
+  },
+  {
+    name: "get_user_mentions",
+    description:
+      "Get recent tweets mentioning a user (@-mentions). Useful for: tracking who's tagging Michael, watchlist-account mention monitoring, finding conversations to engage with. Returns mentions + authors via expansion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        username: { type: "string", description: "X handle without @" },
+        max_results: {
+          type: "number",
+          description: "Mentions to return (5-100, default 10)",
+          minimum: 5,
+          maximum: 100,
+        },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "get_tweet_quote_tweets",
+    description:
+      "Get tweets that quote-posted a specific tweet. Useful for: finding who engaged substantively with a watchlist post (quote-posts indicate stronger interest than likes), discovering conversation threads, surfacing critic takes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tweet_id: { type: "string", description: "Numeric tweet ID being quoted" },
+        max_results: {
+          type: "number",
+          description: "Quote-tweets to return (10-100, default 10)",
+          minimum: 10,
+          maximum: 100,
+        },
+      },
+      required: ["tweet_id"],
+    },
+  },
+  {
+    name: "get_tweet_retweeted_by",
+    description:
+      "Get users who reposted (retweeted) a specific tweet. Useful for: discovering the audience that amplified a piece of content, finding accounts aligned with a watchlist account's stance, mapping influence networks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tweet_id: { type: "string", description: "Numeric tweet ID" },
+        max_results: {
+          type: "number",
+          description: "Users to return (10-100, default 10)",
+          minimum: 10,
+          maximum: 100,
+        },
+      },
+      required: ["tweet_id"],
+    },
+  },
+  {
+    name: "get_tweet_liking_users",
+    description:
+      "Get users who liked a specific tweet. Useful for: engagement-anomaly diagnosis (which kinds of accounts are liking the breakout post?), audience analysis, finding warm-intro candidates for a watchlist account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tweet_id: { type: "string", description: "Numeric tweet ID" },
+        max_results: {
+          type: "number",
+          description: "Users to return (10-100, default 10)",
+          minimum: 10,
+          maximum: 100,
+        },
+      },
+      required: ["tweet_id"],
+    },
+  },
+  {
+    name: "get_user_followers",
+    description:
+      "Get the most recent followers of a user (single page only). Useful for: tracking who follows BM, watchlist follower-overlap analysis. Note: total follower lists can be huge; cap returns at the provided max_results.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        username: { type: "string", description: "X handle without @" },
+        max_results: {
+          type: "number",
+          description: "Followers to return (10-1000, default 100)",
+          minimum: 10,
+          maximum: 1000,
+        },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "get_user_following",
+    description:
+      "Get who a user is following (single page only). Useful for: finding adjacent operators a watchlist account considers worth following, discovering hidden voices in a niche.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        username: { type: "string", description: "X handle without @" },
+        max_results: {
+          type: "number",
+          description: "Following to return (10-1000, default 100)",
+          minimum: 10,
+          maximum: 1000,
+        },
+      },
+      required: ["username"],
+    },
+  },
 ];
 
 async function callTool(name: string, args: any) {
@@ -162,6 +458,36 @@ async function callTool(name: string, args: any) {
       break;
     case "get_tweet_metrics":
       data = await getTweetMetrics(args.tweet_id);
+      break;
+    case "search_recent_tweets":
+      data = await searchRecentTweets(args.query, args.max_results);
+      break;
+    case "lookup_tweet":
+      data = await lookupTweet(args.tweet_id);
+      break;
+    case "lookup_tweets_batch":
+      data = await lookupTweetsBatch(args.tweet_ids);
+      break;
+    case "lookup_users_batch":
+      data = await lookupUsersBatch(args.usernames);
+      break;
+    case "get_user_mentions":
+      data = await getUserMentions(args.username, args.max_results);
+      break;
+    case "get_tweet_quote_tweets":
+      data = await getTweetQuoteTweets(args.tweet_id, args.max_results);
+      break;
+    case "get_tweet_retweeted_by":
+      data = await getTweetRetweetedBy(args.tweet_id, args.max_results);
+      break;
+    case "get_tweet_liking_users":
+      data = await getTweetLikingUsers(args.tweet_id, args.max_results);
+      break;
+    case "get_user_followers":
+      data = await getUserFollowers(args.username, args.max_results);
+      break;
+    case "get_user_following":
+      data = await getUserFollowing(args.username, args.max_results);
       break;
     default:
       throw new Error(`Unknown tool: ${name}`);
