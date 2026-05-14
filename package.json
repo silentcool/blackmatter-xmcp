@@ -1,0 +1,13 @@
+{
+  "name": "blackmatter-xmcp",
+  "version": "0.1.0",
+  "description": "Minimal X (Twitter) API MCP server for the Black Matter VC agent swarm. Deploys on Vercel as a single serverless function.",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.0",
+    "typescript": "^5.4.0"
+  }
+}
