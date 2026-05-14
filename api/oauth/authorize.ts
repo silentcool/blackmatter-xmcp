@@ -58,6 +58,22 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const params = getParams(req);
+
+  console.log(
+    "[authorize]",
+    JSON.stringify({
+      method: req.method,
+      ua: req.headers["user-agent"],
+      response_type: params.response_type,
+      client_id_prefix: (params.client_id ?? "").slice(0, 8),
+      redirect_uri: params.redirect_uri,
+      has_state: !!params.state,
+      code_challenge_method: params.code_challenge_method,
+      has_challenge: !!params.code_challenge,
+      scope: params.scope,
+    })
+  );
+
   const responseType = params.response_type;
   const clientId = params.client_id;
   const redirectUri = params.redirect_uri;

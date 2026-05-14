@@ -114,6 +114,23 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   const clientId = body.client_id ?? basic?.username;
   const clientSecret = body.client_secret ?? basic?.password;
 
+  console.log(
+    "[token]",
+    JSON.stringify({
+      method: req.method,
+      ua: req.headers["user-agent"],
+      content_type: req.headers["content-type"],
+      grant_type: grantType,
+      client_id_prefix: (clientId ?? "").slice(0, 8),
+      has_secret: !!clientSecret,
+      has_code: !!body.code,
+      code_length: body.code?.length,
+      has_verifier: !!body.code_verifier,
+      verifier_length: body.code_verifier?.length,
+      redirect_uri: body.redirect_uri,
+    })
+  );
+
   const expectedId = process.env.OAUTH_CLIENT_ID;
   const expectedSecret = process.env.OAUTH_CLIENT_SECRET;
 
@@ -172,11 +189,17 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!verifyPkce(payload.cc, payload.ccm, codeVerifier)) {
+      console.log("[token] pkce_failed", JSON.stringify({
+        stored_cc: payload.cc,
+        stored_ccm: payload.ccm,
+        verifier_length: codeVerifier?.length,
+      }));
       return res.status(400).json({
         error: "invalid_grant",
         error_description: "pkce_failed",
       });
     }
+    console.log("[token] OK authorization_code");
 
     // For confidential clients in the authorization_code flow, we
     // also require the client_secret. Public clients (PKCE only) MAY
