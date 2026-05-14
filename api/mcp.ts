@@ -241,6 +241,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!checkAuth(req)) {
+    const host = req.headers.host;
+    const proto = (req.headers["x-forwarded-proto"] as string) ?? "https";
+    const base = `${proto}://${host}`;
+    res.setHeader(
+      "WWW-Authenticate",
+      `Bearer realm="${base}", as_uri="${base}/.well-known/oauth-authorization-server"`
+    );
     return res.status(401).json({ error: "Unauthorized" });
   }
 
