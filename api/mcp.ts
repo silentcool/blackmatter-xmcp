@@ -275,6 +275,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
+  const accept = (req.headers.accept ?? "").toString();
+
   if (!checkAuth(req)) {
     const host = req.headers.host;
     const proto = (req.headers["x-forwarded-proto"] as string) ?? "https";
@@ -286,8 +288,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // GET = health/info ping. Streamable HTTP SSE is not implemented in v0.1.
+  // GET = open server-initiated SSE stream per Streamable HTTP transport.
+  // Our server doesn't initiate messages (all responses are reactive to
+  // POST), but strict MCP clients (Perplexity) expect a valid event-stream
+  // here. We return a properly-typed empty stream with one heartbeat and
+  // close cleanly. For non-SSE Accept (e.g. browser visit), return JSON.
   if (req.method === "GET") {
+    if (accept.includes("text/event-stream")) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.status(200);
+      res.write(":heartbeat\n\n");
+      return res.end();
+    }
     return res.status(200).json({
       server: "blackmatter-xmcp",
       version: "0.1.0",
@@ -296,12 +310,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  // DELETE = explicit session termination per Streamable HTTP transport.
+  // We're stateless so there's nothing to clean up — just ack.
+  if (req.method === "DELETE") {
+    return res.status(204).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   const body = req.body;
-  const accept = (req.headers.accept ?? "").toString();
   const wantsSse = accept.includes("text/event-stream");
 
   // Detect if this is an `initialize` call (single or in a batch) so we can
