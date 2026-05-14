@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import * as crypto from "node:crypto";
 
 const X_API_BASE = "https://api.x.com/2";
 
@@ -243,7 +244,8 @@ async function handleRpc(req: JsonRpcRequest) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Accept");
+  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id, Mcp-Protocol-Version");
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
@@ -277,6 +279,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = req.body;
   const accept = (req.headers.accept ?? "").toString();
   const wantsSse = accept.includes("text/event-stream");
+
+  // Detect if this is an `initialize` call (single or in a batch) so we can
+  // set Mcp-Session-Id on the response — some clients (Perplexity) require
+  // a session id even when our server is stateless.
+  const isInitialize = (Array.isArray(body) ? body : [body]).some(
+    (m) => m && typeof m === "object" && m.method === "initialize"
+  );
+  if (isInitialize) {
+    const sessionId = crypto.randomUUID();
+    res.setHeader("Mcp-Session-Id", sessionId);
+  }
 
   if (Array.isArray(body)) {
     const responses = await Promise.all(body.map(handleRpc));
