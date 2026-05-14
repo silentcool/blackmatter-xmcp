@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-// OAuth 2.0 Authorization Server Metadata (RFC 8414).
-// Served at /.well-known/oauth-authorization-server via vercel.json rewrite.
+// OAuth 2.0 Protected Resource Metadata (RFC 9728).
+// Distinct from oauth-authorization-server metadata. MCP clients per
+// the 2025-03-26+ authorization spec consult this to discover which
+// authorization server protects the MCP resource.
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -17,20 +19,10 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.status(200).json({
-    issuer: base,
-    authorization_endpoint: `${base}/api/oauth/authorize`,
-    token_endpoint: `${base}/api/oauth/token`,
-    registration_endpoint: `${base}/api/oauth/register`,
-    grant_types_supported: ["authorization_code", "client_credentials"],
-    response_types_supported: ["code"],
-    code_challenge_methods_supported: ["S256", "plain"],
-    token_endpoint_auth_methods_supported: [
-      "client_secret_post",
-      "client_secret_basic",
-      "none",
-    ],
+    resource: `${base}/api/mcp`,
+    authorization_servers: [base],
     scopes_supported: ["mcp"],
-    // MCP-specific resource metadata fields
+    bearer_methods_supported: ["header"],
     resource_documentation: `${base}/`,
   });
 }

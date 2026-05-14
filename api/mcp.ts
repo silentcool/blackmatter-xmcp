@@ -247,6 +247,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Accept");
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id, Mcp-Protocol-Version");
 
+  // Diagnostic logging (visible in Vercel function logs)
+  try {
+    const bodyForLog =
+      req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? { method: (req.body as any).method, id: (req.body as any).id, has_params: !!(req.body as any).params }
+        : Array.isArray(req.body)
+        ? { batch_size: req.body.length, methods: req.body.map((m: any) => m?.method) }
+        : { raw: typeof req.body };
+    console.log(
+      "[mcp]",
+      JSON.stringify({
+        method: req.method,
+        accept: req.headers.accept,
+        ua: req.headers["user-agent"],
+        has_auth: !!req.headers.authorization,
+        mcp_session_id: req.headers["mcp-session-id"],
+        mcp_protocol_version: req.headers["mcp-protocol-version"],
+        body: bodyForLog,
+      })
+    );
+  } catch (e) {
+    console.log("[mcp] log_failed", String(e));
+  }
+
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
