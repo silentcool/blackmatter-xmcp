@@ -1,6 +1,6 @@
 # blackmatter-xmcp
 
-Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built for the Black Matter VC agent swarm to give agents structured X API access without scraping x.com.
+Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built to give my own AI tooling structured X API access without scraping x.com.
 
 ## Tools exposed (14)
 
@@ -12,7 +12,7 @@ Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built for
 | `get_user_mentions` | Recent @-mentions of a user |
 | `get_user_followers` | Most-recent follower list (single page) |
 | `get_user_following` | Accounts the user follows (single page) |
-| `get_user_liked_tweets` | Most-recent tweets a user has liked (single page) — added 2026-07-02 for BMVC Builder's signal sourcing |
+| `get_user_liked_tweets` | Most-recent tweets a user has liked (single page) |
 
 **Per-tweet reads:**
 | Tool | Purpose |
@@ -76,7 +76,7 @@ X API pay-per-use (Feb 2026 model):
 - $0.01 per user lookup
 - $0.005 per tweet-metrics call
 
-Listener's daily usage (~32 watchlist accounts × 5 tweets each, polled daily): roughly **$25/month** at full coverage. Trivial Vercel function-invocation cost on top.
+My daily usage (~32 watchlist accounts × 5 tweets each, polled daily): roughly **$25/month** at full coverage. Trivial Vercel function-invocation cost on top.
 
 ## Architecture
 
