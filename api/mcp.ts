@@ -206,6 +206,26 @@ async function getUserFollowing(username: string, max_results?: number) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Expanded X API surface — added 2026-07-02 (BMVC Builder signal sourcing)
+// ───────────────────────────────────────────────────────────────────────────
+
+async function getUserLikedTweets(username: string, max_results?: number) {
+  const user = await getUserByUsername(username);
+  const data = await xRequest(`/users/${user.id}/liked_tweets`, {
+    max_results: String(clampMaxResults(max_results, 5, 100, 20)),
+    "tweet.fields": TWEET_FIELDS_FULL,
+    expansions: "author_id",
+    "user.fields": USER_FIELDS_FULL,
+  });
+  return {
+    user,
+    liked_tweets: data.data ?? [],
+    authors: data.includes?.users ?? [],
+    meta: data.meta,
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // MCP tool definitions
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -445,6 +465,27 @@ const TOOLS = [
       required: ["username"],
     },
   },
+  {
+    name: "get_user_liked_tweets",
+    description:
+      "Get the most recent tweets a user has liked, by username. Primary use case: BMVC Builder pulling Michael's own trailing-day likes as a high-signal content source (his own explicit curation, weighted above raw watchlist volume). Returns liked tweets + author info via expansion — a liked tweet's own author may differ from the user whose likes you queried.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        username: {
+          type: "string",
+          description: "The X handle whose likes to fetch (without @)",
+        },
+        max_results: {
+          type: "number",
+          description: "Liked tweets to return (5-100, default 20)",
+          minimum: 5,
+          maximum: 100,
+        },
+      },
+      required: ["username"],
+    },
+  },
 ];
 
 async function callTool(name: string, args: any) {
@@ -488,6 +529,9 @@ async function callTool(name: string, args: any) {
       break;
     case "get_user_following":
       data = await getUserFollowing(args.username, args.max_results);
+      break;
+    case "get_user_liked_tweets":
+      data = await getUserLikedTweets(args.username, args.max_results);
       break;
     default:
       throw new Error(`Unknown tool: ${name}`);

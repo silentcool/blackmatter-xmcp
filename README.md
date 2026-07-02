@@ -2,7 +2,7 @@
 
 Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built for the Black Matter VC agent swarm to give agents structured X API access without scraping x.com.
 
-## Tools exposed (13)
+## Tools exposed (14)
 
 **Per-user reads:**
 | Tool | Purpose |
@@ -12,6 +12,7 @@ Minimal X (Twitter) API MCP server. Single Vercel serverless function. Built for
 | `get_user_mentions` | Recent @-mentions of a user |
 | `get_user_followers` | Most-recent follower list (single page) |
 | `get_user_following` | Accounts the user follows (single page) |
+| `get_user_liked_tweets` | Most-recent tweets a user has liked (single page) — added 2026-07-02 for BMVC Builder's signal sourcing |
 
 **Per-tweet reads:**
 | Tool | Purpose |
